@@ -1,0 +1,209 @@
+title: "Simulation Challenge — Q1 to Q3"
+author: "Sam A"
+format:
+  html:
+    theme: flatly
+    toc: true
+jupyter: python3
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+# 75% — Q1 to Q3
+
+## Q1. Expected value after 1 flip (original game)
+
+Heads (50%): $1,000 × 1.5 = $1,500  
+Tails (50%): $1,000 × 0.6 = $600  
+
+**EV = 0.5 × 1,500 + 0.5 × 600 = $1,050.**
+
+```{python}
+W0 = 1000
+p = 0.5
+ev = p*W0*1.5 + (1-p)*W0*0.6
+ev
+Comment/Interpretation:
+The expected value after one flip is $1,050, which is higher than the starting $1,000.
+At first glance, this makes the game look favorable.
+
+Q2. Expectation vs. reality
+Arithmetic mean multiplier per year: 0.5 × 1.5 + 0.5 × 0.6 = 1.05 → suggests positive expected growth.
+Geometric mean multiplier per year: √(1.5 × 0.6) = √0.9 ≈ 0.9487 → typical path shrinks.
+
+{python}
+Copy code
+import numpy as np
+arith = 0.5*1.5 + 0.5*0.6
+geom  = np.sqrt(1.5*0.6)
+round(arith, 5), round(geom, 5)
+Comment/Interpretation:
+Although the arithmetic mean suggests growth (1.05), the geometric mean (≈ 0.9487) shows that the typical path declines.
+This explains why most individual simulations will trend downward, even though the expected value is positive.
+
+Q3. Single simulation of account balance over time (original game)
+We start with $1,000 at age 20 and flip once per year until 55.
+Heads → ×1.5, Tails → ×0.6 on the entire balance.
+
+{python}
+Copy code
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Reproducible randomness for this single path
+np.random.seed(42)
+
+START_AGE = 20
+END_AGE   = 55
+N_YEARS   = END_AGE - START_AGE
+W0        = 1000.0
+
+def simulate_original_one_path(n_years=N_YEARS, w0=W0):
+    w = [w0]
+    for _ in range(n_years):
+        flip = np.random.binomial(1, 0.5)      # 1=heads, 0=tails
+        mult = 1.5 if flip == 1 else 0.6
+        w.append(w[-1] * mult)
+    ages = list(range(START_AGE, START_AGE + n_years + 1))
+    return pd.DataFrame({"age": ages, "balance": w})
+
+# run one simulation path
+path = simulate_original_one_path()
+
+# object-oriented matplotlib plot
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.plot(path["age"], path["balance"], marker="o")
+ax.set_title("Original Game — Single Simulation Path")
+ax.set_xlabel("Age")
+ax.set_ylabel("Account Balance ($)")
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+
+# show the last few rows so we can see the ending balance
+path.tail()
+Comment/Interpretation:
+This single run shows how the account can shrink over time, even though the expected value after one flip was positive.
+
+---
+
+## Q4. 100 simulations & distribution of final balances (original game)
+
+We run 100 independent simulations from age 20 → 55 and look at the distribution of balances at age 55. We also report mean, median, and the share above the initial $1,000.
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+np.random.seed(2025)
+
+# simulate final balance for the original game
+def simulate_original_final(n_years=N_YEARS, w0=W0):
+    w = w0
+    for _ in range(n_years):
+        flip = np.random.binomial(1, 0.5)
+        mult = 1.5 if flip == 1 else 0.6
+        w *= mult
+    return w
+
+n_sims = 100
+finals = np.array([simulate_original_final() for _ in range(n_sims)])
+df_final = pd.DataFrame({"final_balance": finals})
+
+mean_final   = df_final.final_balance.mean()
+median_final = df_final.final_balance.median()
+prob_above_initial = (df_final.final_balance > W0).mean()
+
+mean_final, median_final, prob_above_initial
+{python}
+Copy code
+# histogram of final balances
+fig, ax = plt.subplots(figsize=(9,5))
+ax.hist(df_final.final_balance, bins=20, edgecolor="black")
+ax.axvline(W0, linestyle="--", linewidth=2, label="Initial $1,000")
+ax.set_title(f"Original Game — Final Balances at Age {END_AGE} (n={n_sims})")
+ax.set_xlabel("Final Balance ($)")
+ax.set_ylabel("Frequency")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+Comment/Interpretation:
+The distribution is right-skewed: a few large outcomes pull the mean above the median, while many runs finish at or below $1,000. That’s why the “average” looks fine but a typical outcome isn’t — consistent with the geometric mean (< 1) from Q2.
+## Q5. Probability balance > $1,000 at age 55 (original game)
+
+We estimate the chance of finishing above the initial $1,000 by running many more simulations (10,000) to get a stable probability.
+
+```{python}
+np.random.seed(2025)
+
+n_sims_big = 10000
+finals_big = np.array([simulate_original_final() for _ in range(n_sims_big)])
+prob_above_initial_big = (finals_big > W0).mean()
+prob_above_initial_big
+Comment/Interpretation:
+The probability of finishing above the starting $1,000 is fairly low, confirming that most players lose money in this game, even though the expected value is positive. This illustrates the mismatch between expected value and the outcome that’s likely for an individual.
+---
+
+## Q6. Modified strategy: 100 sims, P(final > $10,000), and comparison to original
+
+**Rule (modified game):** Each year you **bet exactly 50%** of the account.  
+- Heads → that half becomes 1.5× (the other half stays) ⇒ yearly multiplier **1.25**  
+- Tails → that half becomes 0.6× (the other half stays) ⇒ yearly multiplier **0.80**  
+We run **100 simulations** and estimate `P(final > $10,000)` at age 55. Then we compare to the **original game**. :contentReference[oaicite:0]{index=0}
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+np.random.seed(4242)
+
+# Modified game: half is bet each round (effective multipliers 1.25 or 0.80)
+def simulate_modified_final(n_years=N_YEARS, w0=W0):
+    w = w0
+    for _ in range(n_years):
+        flip = np.random.binomial(1, 0.5)   # 1=heads, 0=tails
+        mult = 1.25 if flip == 1 else 0.80
+        w *= mult
+    return w
+
+# 100 simulations for modified
+n_sims_mod = 100
+finals_mod = np.array([simulate_modified_final() for _ in range(n_sims_mod)])
+df_mod = pd.DataFrame({"final_balance": finals_mod})
+
+# Probability the final balance exceeds $10,000
+prob_gt_10k_mod = (df_mod.final_balance > 10_000).mean()
+mean_mod   = df_mod.final_balance.mean()
+median_mod = df_mod.final_balance.median()
+
+prob_gt_10k_mod, mean_mod, median_mod
+{python}
+Copy code
+# Histogram for modified strategy
+fig, ax = plt.subplots(figsize=(9,5))
+ax.hist(df_mod.final_balance, bins=20, edgecolor="black")
+ax.axvline(10_000, linestyle="--", linewidth=2, label="$10,000 threshold")
+ax.set_title(f"Modified Game — Final Balances at Age {END_AGE} (n={n_sims_mod})")
+ax.set_xlabel("Final Balance ($)")
+ax.set_ylabel("Frequency")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+{python}
+Copy code
+# For a fair comparison, also estimate P(final > $10,000) in the ORIGINAL game
+np.random.seed(4343)
+n_sims_cmp = 100
+finals_orig_10k = np.array([simulate_original_final() for _ in range(n_sims_cmp)])
+prob_gt_10k_orig = (finals_orig_10k > 10_000).mean()
+prob_gt_10k_orig
+Comment/Interpretation:
+
+The modified game’s yearly geometric mean is ≈ 1.0, so a “typical” path hovers around flat; the original game’s geometric mean is < 1 (≈ 0.949), so typical paths shrink.
+
+Report your numbers: P_mod(final > 10k) vs P_orig(final > 10k). If P_mod > P_orig, the modified strategy makes large outcomes more likely than in the original game over the same horizon.
+
+Also note whether the mean > median again (right-skew), which signals that a few big winners raise the average while many runs are lower.
